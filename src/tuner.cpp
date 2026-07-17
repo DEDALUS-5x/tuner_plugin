@@ -11,6 +11,10 @@ Tuner::Tuner(TuningParams start){
   _bounds["ka"] = {0.0f, 2.0f};
 }
 
+void Tuner::set_bounds(map<string, TuningBounds> new_bounds) {
+    _bounds = new_bounds;
+}
+
 void Tuner::reset(){
   _target_history.clear();
   _real_history.clear();
@@ -43,7 +47,7 @@ float Tuner::kinematic_cost(){
 TuningParams Tuner::process_iteration(){
 
   _current_cost = kinematic_cost();
-  std::cout << "[AdamTuner] Stato: " << _current << " | Costo: " << _current_cost << std::endl;
+  std::cout << "Iteration state: " << _current << " | Cost: " << _current_cost << std::endl;
 
   TuningParams next_test_params = _p_base;
 
@@ -88,9 +92,7 @@ TuningParams Tuner::process_iteration(){
 }
 
 TuningParams Tuner::apply_adam(){
-
   _t_step++;
-
   TuningParams grad;
   grad.kp = (_cost_kp - _cost_base) / _delta;
   grad.ki = (_cost_ki - _cost_base) / _delta;
@@ -108,8 +110,12 @@ TuningParams Tuner::apply_adam(){
     // bias correction and boundaries
     float m_hat = m_val / (1.0f - pow(_beta_1, _t_step));
     float v_hat = v_val / (1.0f - pow(_beta_2, _t_step));
-    p -= _alpha * m_hat / (sqrt(v_hat) + _epsilon);
-    p = max(_bounds[name].min_val, min(p, _bounds[name].max_val));
+    if (_bounds[name].max_val > 0.0001f) {
+      p -= _alpha * m_hat / (sqrt(v_hat) + _epsilon);
+      p = max(_bounds[name].min_val, min(p, _bounds[name].max_val));
+    } else {
+      p = 0.0f;
+    }
   };
 
   update_param(_p_base.kp, grad.kp, m.kp, v.kp, "kp");

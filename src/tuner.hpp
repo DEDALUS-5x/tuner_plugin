@@ -35,6 +35,7 @@ class Tuner{
     TuningParams apply_adam();
     TuningParams get_p() const { return _p_base; }
     float get_last_cost() const { return _current_cost; }
+    void set_bounds(map<string, TuningBounds> new_bounds);
 
   private:
     enum State{

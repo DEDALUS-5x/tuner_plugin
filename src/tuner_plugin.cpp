@@ -52,28 +52,45 @@ public:
   // return_type::error: _error is traced, skip process
   // return_type::critical: execution stops
   return_type load_data(json const &input, string topic = "", vector<unsigned char> const *blob = nullptr) override {
-    // Do something with the input data
-
-    if (_is_tuning_active && input.contains("target_y") && input.contains("real_y")) {
+    
+    if (!_is_tuning_active || _current_phase == TUNE_DONE) return return_type::retry;
             
-      float target = input["target_y"];
-      float real = input["real_y"];
-      _tuner.log_data(target, real);
+    std::string target_key;
+    int real_idx = 0;
+    switch (_current_phase) {
+      case TUNE_X: target_key = "x"; real_idx = 0; break;
+      case TUNE_Y: target_key = "y"; real_idx = 1; break;
+      case TUNE_A: target_key = "a"; real_idx = 3; break;
+      case TUNE_C: target_key = "c"; real_idx = 4; break;
+    }
 
-      // stop when target does not change for a specific amount of time
-      if (std::abs(target - _last_target_y) < 0.0001f) {
-        _stationary_counter++;
-      } else {
-        _stationary_counter = 0;
+    if (topic == "setpoint" && input.contains("spi_input")) {
+      if (input["spi_input"].contains(target_key)) {
+        _target_k_minus_1 = _target_k;
+        _target_k = input["spi_input"][target_key];
       }
-      _last_target_y = target;
     }
 
-    if(_stationary_counter > 500 && _tuner.full_buffer()){
-      return return_type::success;
-    } else{
-      return return_type::retry;
+    else if (topic == "machine" && input.contains("position")) {
+      if (input["position"].is_array() && input["position"].size() > real_idx) {
+        
+        float real = input["position"][real_idx];
+        _tuner.log_data(_target_k_minus_1, real);
+
+        if (std::abs(_target_k_minus_1 - _last_target) < 0.0001f) {
+          _stationary_counter++;
+        } else {
+          _stationary_counter = 0;
+        }
+        _last_target = _target_k_minus_1;
+
+        if (_stationary_counter > 500 && _tuner.full_buffer()) {
+          return return_type::success; 
+        }
+      }
     }
+
+    return return_type::retry;
   }
 
   // We calculate the average of the last N values for each key and store it
@@ -92,8 +109,14 @@ public:
     float current_cost = _tuner.get_last_cost();
     _glob_counter++;
 
+    string axis_str;
+    if (_current_phase == TUNE_X) axis_str = "x";
+    else if (_current_phase == TUNE_Y) axis_str = "y";
+    else if (_current_phase == TUNE_A) axis_str = "a";
+    else if (_current_phase == TUNE_C) axis_str = "c";
+
     out["command"] = "update_pids";
-    out["axis"] = "Y";
+    out["axis"] = axis_str;
     out["kp"] = new_params.kp;
     out["ki"] = new_params.ki;
     out["kd"] = new_params.kd;
@@ -117,11 +140,34 @@ public:
     bool timeout_reached = (_glob_counter > 10);
 
     if (target_reached || parameters_stagnated || timeout_reached) {
-        cout << "[Tuner] OK convergence: " << current_cost << endl;
-        out["action"] = 1;
-    } else {
-        cout << "[Tuner] Loading. Cost: " << current_cost << endl;
-        out["action"] = 2;
+
+      switch(_current_phase){
+
+        case TUNE_X:
+          _current_phase = TUNE_Y;
+          out["action"] = "LOAD_GCODE_Y";
+          break;
+        case TUNE_Y:
+          _current_phase = TUNE_A;
+          out["action"] = "LOAD_GCODE_A";
+          break;
+        case TUNE_A:
+          _current_phase = TUNE_C;
+          out["action"] = "LOAD_GCODE_C";
+          break;
+        case TUNE_C:
+          _current_phase = TUNE_DONE;
+        case TUNE_DONE:
+          _is_tuning_active = false;
+          out["action"] = "DONE";
+      }
+
+      if (_current_phase != TUNE_DONE) {
+        setup_tuner_for_current_phase(); 
+      }
+    } else{
+
+      out["action"] = "REDO_GCODE";
     }
 
     _tuner.reset();
@@ -157,12 +203,47 @@ public:
   };
 
 private:
+
+  enum TuningPhase {
+    TUNE_X,
+    TUNE_Y,
+    TUNE_A,
+    TUNE_C,
+    TUNE_DONE
+  };
+ 
+  TuningPhase _current_phase = TUNE_X;
   Tuner _tuner = Tuner({1.0f, 0.0f, 0.0f, 0.1f, 0.01f});
-  float _last_target_y = 0.0f;
+  float _last_target = 0.0f;
   int _stationary_counter = 0;
   bool _is_tuning_active = true;
 
   double _glob_counter = 0;
+
+  float _target_k_minus_1;
+  float _target_k;
+
+  // fly function for selecting axes
+  void setup_tuner_for_current_phase() {
+    map<string, TuningBounds> bounds;
+    if (_current_phase == TUNE_Y || _current_phase == TUNE_X) {
+      bounds["kp"] = {0.0f, 50.0f};
+      bounds["ki"] = {0.0f, 10.0f};
+      bounds["kd"] = {0.0f, 500.0f};
+      bounds["kv"] = {0.0f, 5.0f};
+      bounds["ka"] = {0.0f, 2.0f};
+    } else {
+        bounds["kp"] = {0.0f, 50.0f};
+        bounds["ki"] = {0.0f, 0.0f};
+        bounds["kd"] = {0.0f, 0.0f};
+        bounds["kv"] = {0.0f, 0.0f};
+        bounds["ka"] = {0.0f, 2.0f};
+    }
+    
+    _tuner.set_bounds(bounds);
+    _tuner.reset();
+    _glob_counter = 0;
+  }
 };
 
 
