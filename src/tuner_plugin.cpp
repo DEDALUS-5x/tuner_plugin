@@ -87,7 +87,10 @@ public:
   return_type process(json &out, vector<unsigned char> *blob = nullptr) override {
     out.clear();
 
+    TuningParams old_params = _tuner.get_p();
     TuningParams new_params = _tuner.process_iteration();
+    float current_cost = _tuner.get_last_cost();
+    _glob_counter++;
 
     out["command"] = "update_pids";
     out["axis"] = "Y";
@@ -96,7 +99,31 @@ public:
     out["kd"] = new_params.kd;
     out["kv"] = new_params.kv;
     out["ka"] = new_params.ka;
-    out["action"] = 2; // REDO
+    
+    /*
+    Action states
+    REDO = 2
+    OK = 1
+    IDLE = 0
+    */
+    
+    // check global tolerance
+    bool target_reached = (current_cost < 0.05f);
+    // check params tolerance
+    float delta_kp = abs(new_params.kp - old_params.kp);
+    float delta_kv = abs(new_params.kv - old_params.kv);
+    bool parameters_stagnated = (delta_kp < 0.005f && delta_kv < 0.001f);
+    // check iterations number
+    bool timeout_reached = (_glob_counter > 10);
+
+    if (target_reached || parameters_stagnated || timeout_reached) {
+        cout << "[Tuner] OK convergence: " << current_cost << endl;
+        out["action"] = 1;
+    } else {
+        cout << "[Tuner] Loading. Cost: " << current_cost << endl;
+        out["action"] = 2;
+    }
+
     _tuner.reset();
     _stationary_counter = 0;
 
@@ -134,6 +161,8 @@ private:
   float _last_target_y = 0.0f;
   int _stationary_counter = 0;
   bool _is_tuning_active = true;
+
+  double _glob_counter = 0;
 };
 
 

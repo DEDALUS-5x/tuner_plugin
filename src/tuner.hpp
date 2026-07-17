@@ -33,7 +33,8 @@ class Tuner{
     float kinematic_cost();
     TuningParams process_iteration();
     TuningParams apply_adam();
-
+    TuningParams get_p() const { return _p_base; }
+    float get_last_cost() const { return _current_cost; }
 
   private:
     enum State{
@@ -53,6 +54,7 @@ class Tuner{
     float _beta_2 = 0.99f;
     float _epsilon = 1e-8f;
     int _t_step = 0;
+    float _current_cost;
 
     TuningParams m = {0, 0, 0, 0, 0};
     TuningParams v = {0, 0, 0, 0, 0};

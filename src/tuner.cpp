@@ -42,44 +42,44 @@ float Tuner::kinematic_cost(){
 
 TuningParams Tuner::process_iteration(){
 
-  float current_cost = kinematic_cost();
-  std::cout << "[AdamTuner] Stato: " << _current << " | Costo: " << current_cost << std::endl;
+  _current_cost = kinematic_cost();
+  std::cout << "[AdamTuner] Stato: " << _current << " | Costo: " << _current_cost << std::endl;
 
   TuningParams next_test_params = _p_base;
 
   switch (_current) {
       case EVAL_BASE:
-          _cost_base = current_cost;
+          _cost_base = _current_cost;
           next_test_params.kp += _delta;
           _current = EVAL_KP;
           break;
 
       case EVAL_KP:
-          _cost_kp = current_cost;
+          _cost_kp = _current_cost;
           next_test_params.ki += _delta;
           _current = EVAL_KI;
           break;
 
       case EVAL_KI:
-          _cost_ki = current_cost;
+          _cost_ki = _current_cost;
           next_test_params.kd += _delta;
           _current = EVAL_KD;
           break;
 
       case EVAL_KD:
-          _cost_kd = current_cost;
+          _cost_kd = _current_cost;
           next_test_params.kv += _delta;
           _current = EVAL_KV;
           break;
 
       case EVAL_KV:
-          _cost_kv = current_cost;
+          _cost_kv = _current_cost;
           next_test_params.ka += _delta;
           _current = EVAL_KA;
           break;
 
       case EVAL_KA:
-          _cost_ka = current_cost;
+          _cost_ka = _current_cost;
           _current = APPLY_ADAM;
           return apply_adam(); // Applica e ricomincia
   }
