@@ -130,7 +130,7 @@ endif()
 include_directories(${json_SOURCE_DIR}/include)
 
 # These plugins are always build and use for testing
-add_plugin(tuner_plugin)
+add_plugin(tuner_plugin LIBS ${SRC_DIR}/tuner.cpp)
 
 
 # INSTALL ######################################################################

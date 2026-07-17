@@ -18,6 +18,7 @@
 #include <pugg/Kernel.h>
 
 // other includes as needed here
+#include "tuner.hpp"
 
 // Define the name of the plugin
 #ifndef PLUGIN_NAME
@@ -52,7 +53,27 @@ public:
   // return_type::critical: execution stops
   return_type load_data(json const &input, string topic = "", vector<unsigned char> const *blob = nullptr) override {
     // Do something with the input data
-    return return_type::success;
+
+    if (_is_tuning_active && input.contains("target_y") && input.contains("real_y")) {
+            
+      float target = input["target_y"];
+      float real = input["real_y"];
+      _tuner.log_data(target, real);
+
+      // stop when target does not change for a specific amount of time
+      if (std::abs(target - _last_target_y) < 0.0001f) {
+        _stationary_counter++;
+      } else {
+        _stationary_counter = 0;
+      }
+      _last_target_y = target;
+    }
+
+    if(_stationary_counter > 500 && _tuner.full_buffer()){
+      return return_type::success;
+    } else{
+      return return_type::retry;
+    }
   }
 
   // We calculate the average of the last N values for each key and store it
@@ -66,10 +87,19 @@ public:
   return_type process(json &out, vector<unsigned char> *blob = nullptr) override {
     out.clear();
 
-    // load the data as necessary and set the fields of the json out variable
+    TuningParams new_params = _tuner.process_iteration();
 
-    // This sets the agent_id field in the output json object, only when it is
-    // not empty
+    out["command"] = "update_pids";
+    out["axis"] = "Y";
+    out["kp"] = new_params.kp;
+    out["ki"] = new_params.ki;
+    out["kd"] = new_params.kd;
+    out["kv"] = new_params.kv;
+    out["ka"] = new_params.ka;
+    out["action"] = 2; // REDO
+    _tuner.reset();
+    _stationary_counter = 0;
+
     if (!_agent_id.empty()) out["agent_id"] = _agent_id;
     return return_type::success;
   }
@@ -100,8 +130,10 @@ public:
   };
 
 private:
-  // Define the fields that are used to store internal resources
-  
+  Tuner _tuner = Tuner({1.0f, 0.0f, 0.0f, 0.1f, 0.01f});
+  float _last_target_y = 0.0f;
+  int _stationary_counter = 0;
+  bool _is_tuning_active = true;
 };
 
 
