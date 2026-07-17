@@ -4,7 +4,7 @@ This is a Filter plugin for [MADS](https://github.com/MADS-NET/MADS).
 
 <provide here some introductory info>
 
-*Required MADS version: 2.2.0.*
+*Required MADS version: 2.3.1.*
 
 
 ## Supported platforms
