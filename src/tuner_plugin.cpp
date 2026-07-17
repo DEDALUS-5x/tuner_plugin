@@ -19,6 +19,9 @@
 
 // other includes as needed here
 #include "tuner.hpp"
+#include <fstream>
+#include <sstream>
+#include <chrono>
 
 // Define the name of the plugin
 #ifndef PLUGIN_NAME
@@ -55,41 +58,32 @@ public:
     
     if (!_is_tuning_active || _current_phase == TUNE_DONE) return return_type::retry;
             
-    std::string target_key;
     int real_idx = 0;
     switch (_current_phase) {
-      case TUNE_X: target_key = "x"; real_idx = 0; break;
-      case TUNE_Y: target_key = "y"; real_idx = 1; break;
-      case TUNE_A: target_key = "a"; real_idx = 3; break;
-      case TUNE_C: target_key = "c"; real_idx = 4; break;
+      case TUNE_X: real_idx = 0; break;
+      case TUNE_Y: real_idx = 1; break;
+      case TUNE_A: real_idx = 3; break;
+      case TUNE_C: real_idx = 4; break;
     }
 
-    if (topic == "setpoint" && input.contains("spi_input")) {
-      if (input["spi_input"].contains(target_key)) {
-        _target_k_minus_1 = _target_k;
-        _target_k = input["spi_input"][target_key];
-      }
-    }
-
-    else if (topic == "machine" && input.contains("position")) {
+    if (topic == "machine" && input.contains("position")) {
       if (input["position"].is_array() && input["position"].size() > real_idx) {
         
         float real = input["position"][real_idx];
         _tuner.log_data(_target_k_minus_1, real);
-
+        _last_feedback_time = chrono::steady_clock::now();
         if (std::abs(_target_k_minus_1 - _last_target) < 0.0001f) {
           _stationary_counter++;
         } else {
           _stationary_counter = 0;
         }
         _last_target = _target_k_minus_1;
-
         if (_stationary_counter > 500 && _tuner.full_buffer()) {
           return return_type::success; 
         }
+        
       }
     }
-
     return return_type::retry;
   }
 
@@ -103,75 +97,97 @@ public:
   // return_type::critical: execution stops
   return_type process(json &out, vector<unsigned char> *blob = nullptr) override {
     out.clear();
+    if (!_is_tuning_active) return return_type::retry;
+    if (_iter_state == PLAYING_CSV) {
+      
+      if (_csv_idx < _current_trajectory.size()) {
 
-    TuningParams old_params = _tuner.get_p();
-    TuningParams new_params = _tuner.process_iteration();
-    float current_cost = _tuner.get_last_cost();
-    _glob_counter++;
+        _current_csv_setpoint = _current_trajectory[_csv_idx++];
+        _target_k_minus_1 = _target_k;
+        _target_k = _current_csv_setpoint;
+        out["spi_input"]["z"] = 0.0f;
+        out["spi_input"]["vx"] = 0.0f;
+        out["spi_input"]["vy"] = 0.0f;
 
-    string axis_str;
-    if (_current_phase == TUNE_X) axis_str = "x";
-    else if (_current_phase == TUNE_Y) axis_str = "y";
-    else if (_current_phase == TUNE_A) axis_str = "a";
-    else if (_current_phase == TUNE_C) axis_str = "c";
+        if(_current_phase == TUNE_X){
+          out["spi_input"]["x"] = _current_csv_setpoint;
+          out["spi_input"]["y"] = 0.0f;
+          out["spi_input"]["a"] = 0.0f;
+          out["spi_input"]["c"] = 0.0f;
+        
+        } else if(_current_phase == TUNE_Y){
+          out["spi_input"]["y"] = _current_csv_setpoint;
+          out["spi_input"]["x"] = 0.0f;
+          out["spi_input"]["a"] = 0.0f;
+          out["spi_input"]["c"] = 0.0f;
+        
+        } else if(_current_phase == TUNE_A){
+          out["spi_input"]["a"] = _current_csv_setpoint;
+          out["spi_input"]["x"] = 0.0f;
+          out["spi_input"]["y"] = 0.0f;
+          out["spi_input"]["c"] = 0.0f;
 
-    out["command"] = "update_pids";
-    out["axis"] = axis_str;
-    out["kp"] = new_params.kp;
-    out["ki"] = new_params.ki;
-    out["kd"] = new_params.kd;
-    out["kv"] = new_params.kv;
-    out["ka"] = new_params.ka;
-    
-    /*
-    Action states
-    REDO = 2
-    OK = 1
-    IDLE = 0
-    */
-    
-    // check global tolerance
-    bool target_reached = (current_cost < 0.05f);
-    // check params tolerance
-    float delta_kp = abs(new_params.kp - old_params.kp);
-    float delta_kv = abs(new_params.kv - old_params.kv);
-    bool parameters_stagnated = (delta_kp < 0.005f && delta_kv < 0.001f);
-    // check iterations number
-    bool timeout_reached = (_glob_counter > 10);
+        } else if(_current_phase == TUNE_C){
+          out["spi_input"]["c"] = _current_csv_setpoint;
+          out["spi_input"]["x"] = 0.0f;
+          out["spi_input"]["y"] = 0.0f;
+          out["spi_input"]["a"] = 0.0f;
+        }
 
-    if (target_reached || parameters_stagnated || timeout_reached) {
-
-      switch(_current_phase){
-
-        case TUNE_X:
-          _current_phase = TUNE_Y;
-          out["action"] = "LOAD_GCODE_Y";
-          break;
-        case TUNE_Y:
-          _current_phase = TUNE_A;
-          out["action"] = "LOAD_GCODE_A";
-          break;
-        case TUNE_A:
-          _current_phase = TUNE_C;
-          out["action"] = "LOAD_GCODE_C";
-          break;
-        case TUNE_C:
-          _current_phase = TUNE_DONE;
-        case TUNE_DONE:
-          _is_tuning_active = false;
-          out["action"] = "DONE";
+      } else {
+        _iter_state = WAITING_SETTLE;
       }
-
-      if (_current_phase != TUNE_DONE) {
-        setup_tuner_for_current_phase(); 
-      }
-    } else{
-
-      out["action"] = "REDO_GCODE";
     }
+    
+    else if (_iter_state == WAITING_SETTLE) {
+      auto now = chrono::steady_clock::now();
+      auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(now - _last_feedback_time).count();
+      if (elapsed_ms > 1000) {
+        _iter_state = RUN_ADAM;
+      }
+    }
+    
+    else if (_iter_state == RUN_ADAM) {
+      
+      TuningParams old_params = _tuner.get_p();
+      TuningParams new_params = _tuner.process_iteration();
+      float current_cost = _tuner.get_last_cost();
+      _glob_counter++;
 
-    _tuner.reset();
-    _stationary_counter = 0;
+      // check tolerance
+      bool target_reached = (current_cost < 0.05f);
+      float delta_kp = abs(new_params.kp - old_params.kp);
+      float delta_kv = abs(new_params.kv - old_params.kv);
+      bool parameters_stagnated = (delta_kp < 0.005f && delta_kv < 0.001f);
+      bool timeout_reached = (_glob_counter > 10);
+
+      if (target_reached || parameters_stagnated || timeout_reached) {
+        // next axis
+        switch(_current_phase){
+          case TUNE_X: _current_phase = TUNE_Y; break;
+          case TUNE_Y: _current_phase = TUNE_A; break;
+          case TUNE_A: _current_phase = TUNE_C; break;
+          case TUNE_C: _current_phase = TUNE_DONE; _is_tuning_active = false; break;
+        }
+
+        if (_current_phase != TUNE_DONE) {
+          setup_tuner_for_current_phase(); 
+        }
+      } 
+      
+      _tuner.reset();
+      _stationary_counter = 0;
+      _csv_idx = 0;
+      _iter_state = PLAYING_CSV;
+
+      out["command"] = "update_pids";
+      out["axis"] = (int)_current_phase;
+      out["kp"] = new_params.kp;
+      out["ki"] = new_params.ki;
+      out["kd"] = new_params.kd;
+      out["kv"] = new_params.kv;
+      out["ka"] = new_params.ka;
+    }
 
     if (!_agent_id.empty()) out["agent_id"] = _agent_id;
     return return_type::success;
@@ -212,20 +228,58 @@ private:
     TUNE_DONE
   };
  
+  enum IterationState { PLAYING_CSV, WAITING_SETTLE, RUN_ADAM };
+  IterationState _iter_state = PLAYING_CSV;
   TuningPhase _current_phase = TUNE_X;
   Tuner _tuner = Tuner({1.0f, 0.0f, 0.0f, 0.1f, 0.01f});
   float _last_target = 0.0f;
   int _stationary_counter = 0;
   bool _is_tuning_active = true;
-
   double _glob_counter = 0;
+  float _target_k_minus_1 = 0.0f;
+  float _target_k = 0.0f;
+  vector<float> _current_trajectory;
+  size_t _csv_idx = 0;
+  float _current_csv_setpoint = 0.0f;
+  chrono::steady_clock::time_point _last_feedback_time;
 
-  float _target_k_minus_1;
-  float _target_k;
+  // load csv
+  void load_csv_trajectory(const string& filename, int column_idx) {
+    _current_trajectory.clear();
+    _csv_idx = 0;
+    ifstream file(filename);
+    string line;
+
+    if (file.is_open()) {
+      while (getline(file, line)) {
+
+        stringstream ss(line);
+        string token;
+        int current_col = 0;
+        while(getline(ss, token, ',')){
+
+          if(current_col == column_idx){
+            try{
+              _current_trajectory.push_back(stof(token));
+            }
+            catch(...){}
+            break;
+          }
+
+          current_col++;
+        }
+      }
+    } else {
+      cout << "Error while opening file: " << filename << endl;
+    }
+  }
 
   // fly function for selecting axes
   void setup_tuner_for_current_phase() {
     map<string, TuningBounds> bounds;
+    string csv_file;
+    int csv_column = 0;
+
     if (_current_phase == TUNE_Y || _current_phase == TUNE_X) {
       bounds["kp"] = {0.0f, 50.0f};
       bounds["ki"] = {0.0f, 10.0f};
@@ -239,10 +293,30 @@ private:
         bounds["kv"] = {0.0f, 0.0f};
         bounds["ka"] = {0.0f, 2.0f};
     }
+
+    if (_current_phase == TUNE_X){
+      csv_file = "traj_x.csv";
+      csv_column = 1;
+    } 
+    else if (_current_phase == TUNE_Y){
+      csv_file = "traj_y.csv";
+      csv_column = 1;
+    }
+    else if (_current_phase == TUNE_A){
+      csv_file = "traj_a.csv";
+      csv_column = 1;
+    }
+    else if (_current_phase == TUNE_C){
+      csv_file = "traj_c.csv";
+      csv_column = 1;
+    }
     
     _tuner.set_bounds(bounds);
     _tuner.reset();
     _glob_counter = 0;
+
+    load_csv_trajectory(csv_file, csv_column);
+    _last_feedback_time = chrono::steady_clock::now();
   }
 };
 
