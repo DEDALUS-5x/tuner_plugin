@@ -302,15 +302,15 @@ private:
     } 
     else if (_current_phase == TUNE_Y){
       csv_file = "traj_y.csv";
-      csv_column = 1;
+      csv_column = 2;
     }
     else if (_current_phase == TUNE_A){
       csv_file = "traj_a.csv";
-      csv_column = 1;
+      csv_column = 3;
     }
     else if (_current_phase == TUNE_C){
       csv_file = "traj_c.csv";
-      csv_column = 1;
+      csv_column = 4;
     }
     
     _tuner.set_bounds(bounds);
