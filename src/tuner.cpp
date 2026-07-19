@@ -4,10 +4,10 @@
 Tuner::Tuner(TuningParams start){
 
   _p_base = start;
-  _bounds["kp"] = {0.0f, 50.0f};
-  _bounds["ki"] = {0.0f, 10.0f};
-  _bounds["kd"] = {0.0f, 500.0f};
-  _bounds["kv"] = {0.0f, 5.0f};
+  _bounds["kp"] = {0.0f, 120.0f};
+  _bounds["ki"] = {0.0f, 2.0f};
+  _bounds["kd"] = {0.0f, 10.0f};
+  _bounds["kv"] = {0.0f, 100.0f};
   _bounds["ka"] = {0.0f, 2.0f};
 }
 

@@ -232,7 +232,7 @@ private:
   enum IterationState { PLAYING_CSV, WAITING_SETTLE, RUN_ADAM };
   IterationState _iter_state = PLAYING_CSV;
   TuningPhase _current_phase = TUNE_X;
-  Tuner _tuner = Tuner({1.0f, 0.0f, 0.0f, 0.1f, 0.01f});
+  Tuner _tuner = Tuner({100.0f, 0.01f, 0.001f, 20.0f, 0.01f});
   float _last_target = 0.0f;
   int _stationary_counter = 0;
   bool _is_tuning_active = true;
