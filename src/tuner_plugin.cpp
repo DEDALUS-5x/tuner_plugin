@@ -198,6 +198,8 @@ public:
     // (e.g. agent_id, etc.)
     Filter::set_params(params);
 
+    setup_tuner_for_current_phase();
+
     // provide sensible defaults for the parameters by setting e.g.
     _params["some_field"] = "default_value";
     // more here...
