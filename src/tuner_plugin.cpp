@@ -32,7 +32,6 @@
 using namespace std;
 using json = nlohmann::json;
 
-
 // Plugin class. This shall be the only part that needs to be modified,
 // implementing the actual functionality
 class Tuner_pluginPlugin : public Filter<json, json> {
@@ -251,26 +250,33 @@ private:
     _csv_idx = 0;
     ifstream file(filename);
     string line;
-
+    
     if (file.is_open()) {
       while (getline(file, line)) {
+        if (line.empty()) continue;
 
         stringstream ss(line);
         string token;
         int current_col = 0;
-        while(getline(ss, token, ',')){
+        bool found = false;
 
+        while(getline(ss, token, ',')){
           if(current_col == column_idx){
             try{
+              token.erase(remove(token.begin(), token.end(), '\r'), token.end());
               _current_trajectory.push_back(stof(token));
+              found = true;
             }
             catch(...){}
             break;
           }
-
           current_col++;
         }
       }
+
+      cout << "Loaded " << _current_trajectory.size() 
+           << " setpoint from " << filename << endl;
+
     } else {
       cout << "Error while opening file: " << filename << endl;
     }
@@ -299,6 +305,7 @@ private:
     if (_current_phase == TUNE_X){
       csv_file = "traj_x.csv";
       csv_column = 1;
+      cout << "fetch traj_x.csv" << endl;
     } 
     else if (_current_phase == TUNE_Y){
       csv_file = "traj_y.csv";
@@ -318,6 +325,11 @@ private:
     _glob_counter = 0;
 
     load_csv_trajectory(csv_file, csv_column);
+    if (_current_trajectory.empty()) {
+        cout << "No data loaded" << endl;
+        _is_tuning_active = false;
+        return;
+    }
     _last_feedback_time = chrono::steady_clock::now();
   }
 };
