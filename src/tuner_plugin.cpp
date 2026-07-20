@@ -164,7 +164,7 @@ public:
         // next axis
         switch(_current_phase){
           case TUNE_X: _current_phase = TUNE_Y; break;
-          case TUNE_Y: _current_phase = TUNE_DONE; break;
+          case TUNE_Y: _current_phase = TUNE_DONE; _is_tuning_active = false; break;
           case TUNE_A: _current_phase = TUNE_C; break;
           case TUNE_C: _current_phase = TUNE_DONE; _is_tuning_active = false; break;
         }
@@ -308,8 +308,8 @@ private:
       cout << "fetch traj_x.csv" << endl;
     } 
     else if (_current_phase == TUNE_Y){
-      csv_file = "traj_y.csv";
-      csv_column = 2;
+      csv_file = "traj_x.csv";
+      csv_column = 1;
     }
     else if (_current_phase == TUNE_A){
       csv_file = "traj_a.csv";
