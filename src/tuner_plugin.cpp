@@ -151,7 +151,7 @@ public:
       float delta_kp = abs(new_params.kp - old_params.kp);
       float delta_kv = abs(new_params.kv - old_params.kv);
       bool parameters_stagnated = (delta_kp < 0.005f && delta_kv < 0.001f);
-      bool timeout_reached = (_glob_counter > 30);
+      bool timeout_reached = (_glob_counter > 240);
 
       if (target_reached || parameters_stagnated || timeout_reached) {
         // next axis
@@ -292,6 +292,8 @@ private:
     string csv_file;
     int csv_column = 0;
 
+    TuningParams start_pids;
+
     if (_current_phase == TUNE_Y || _current_phase == TUNE_X) {
       bounds["kp"] = {0.0f, 50.0f};
       bounds["ki"] = {0.0f, 10.0f};
@@ -307,11 +309,13 @@ private:
     }
 
     if (_current_phase == TUNE_X){
+      start_pids = {100.0f, 0.01f, 0.001f, 20.0f, 0.001f};
       csv_file = "traj_x.csv";
       csv_column = 1;
       cout << "fetch traj_x.csv" << endl;
     } 
     else if (_current_phase == TUNE_Y){
+      start_pids = {50.0f, 0.01f, 0.001f, 10.0f, 0.001f};
       csv_file = "traj_x.csv";
       csv_column = 1;
     }
@@ -324,6 +328,7 @@ private:
       csv_column = 4;
     }
     
+    _tuner = Tuner(start_pids);
     _tuner.set_bounds(bounds);
     _tuner.reset();
     _glob_counter = 0;
