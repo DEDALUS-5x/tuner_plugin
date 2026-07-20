@@ -70,16 +70,7 @@ public:
         
         float real = input["position"][real_idx];
         _tuner.log_data(_target_k_minus_1, real);
-        _last_feedback_time = chrono::steady_clock::now();
-        if (std::abs(_target_k_minus_1 - _last_target) < 0.0001f) {
-          _stationary_counter++;
-        } else {
-          _stationary_counter = 0;
-        }
-        _last_target = _target_k_minus_1;
-        if (_stationary_counter > 500 && _tuner.full_buffer()) {
-          return return_type::success; 
-        }
+        return return_type::success;
         
       }
     }
@@ -97,13 +88,28 @@ public:
   return_type process(json &out, vector<unsigned char> *blob = nullptr) override {
     out.clear();
     if (!_is_tuning_active) return return_type::retry;
+
     if (_iter_state == PLAYING_CSV) {
-      
       if (_csv_idx < _current_trajectory.size()) {
 
         _current_csv_setpoint = _current_trajectory[_csv_idx++];
         _target_k_minus_1 = _target_k;
         _target_k = _current_csv_setpoint;
+      } else{
+        _iter_state = WAITING_SETTLE;
+        _stationary_counter = 0;
+      }
+    }
+
+    if(_iter_state == WAITING_SETTLE){
+      _stationary_counter++;
+      if(_stationary_counter > 1000){
+        _iter_state = RUN_ADAM;
+      }
+    }
+
+    if(_iter_state == PLAYING_CSV || _iter_state == WAITING_SETTLE){
+      
         out["spi_input"]["z"] = 0.0f;
         out["spi_input"]["vx"] = 0.0f;
         out["spi_input"]["vy"] = 0.0f;
@@ -133,20 +139,7 @@ public:
           out["spi_input"]["a"] = 0.0f;
         }
 
-      } else {
-        _iter_state = WAITING_SETTLE;
-      }
-    }
-    
-    else if (_iter_state == WAITING_SETTLE) {
-      auto now = chrono::steady_clock::now();
-      auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(now - _last_feedback_time).count();
-      if (elapsed_ms > 1000) {
-        _iter_state = RUN_ADAM;
-      }
-    }
-    
-    else if (_iter_state == RUN_ADAM) {
+    } else if (_iter_state == RUN_ADAM) {
       
       TuningParams old_params = _tuner.get_p();
       TuningParams new_params = _tuner.process_iteration();
