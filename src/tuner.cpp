@@ -54,31 +54,31 @@ TuningParams Tuner::process_iteration(){
   switch (_current) {
       case EVAL_BASE:
           _cost_base = _current_cost;
-          next_test_params.kp += _delta;
+          next_test_params.kp += _deltas.kp;
           _current = EVAL_KP;
           break;
 
       case EVAL_KP:
           _cost_kp = _current_cost;
-          next_test_params.ki += _delta;
+          next_test_params.ki += _deltas.ki;
           _current = EVAL_KI;
           break;
 
       case EVAL_KI:
           _cost_ki = _current_cost;
-          next_test_params.kd += _delta;
+          next_test_params.kd += _deltas.kd;
           _current = EVAL_KD;
           break;
 
       case EVAL_KD:
           _cost_kd = _current_cost;
-          next_test_params.kv += _delta;
+          next_test_params.kv += _deltas.kv;
           _current = EVAL_KV;
           break;
 
       case EVAL_KV:
           _cost_kv = _current_cost;
-          next_test_params.ka += _delta;
+          next_test_params.ka += _deltas.ka;
           _current = EVAL_KA;
           break;
 
@@ -94,14 +94,14 @@ TuningParams Tuner::process_iteration(){
 TuningParams Tuner::apply_adam(){
   _t_step++;
   TuningParams grad;
-  grad.kp = (_cost_kp - _cost_base) / _delta;
-  grad.ki = (_cost_ki - _cost_base) / _delta;
-  grad.kd = (_cost_kd - _cost_base) / _delta;
-  grad.kv = (_cost_kv - _cost_base) / _delta;
-  grad.ka = (_cost_ka - _cost_base) / _delta;
+  grad.kp = (_cost_kp - _cost_base) / _deltas.kp;
+  grad.ki = (_cost_ki - _cost_base) / _deltas.ki;
+  grad.kd = (_cost_kd - _cost_base) / _deltas.kd;
+  grad.kv = (_cost_kv - _cost_base) / _deltas.kv;
+  grad.ka = (_cost_ka - _cost_base) / _deltas.ka;
 
   // lambda for ADAM single parameter
-  auto update_param = [&](float& p, float g, float& m_val, float& v_val, string name) {
+  auto update_param = [&](float& p, float g, float& m_val, float specific_alpha, float& v_val, string name) {
 
     // moments update
     m_val = _beta_1 * m_val + (1.0f - _beta_1) * g;
@@ -111,20 +111,20 @@ TuningParams Tuner::apply_adam(){
     float m_hat = m_val / (1.0f - pow(_beta_1, _t_step));
     float v_hat = v_val / (1.0f - pow(_beta_2, _t_step));
     if (_bounds[name].max_val > 0.0001f) {
-      p -= _alpha * m_hat / (sqrt(v_hat) + _epsilon);
+      p -= specific_alpha * m_hat / (sqrt(v_hat) + _epsilon);
       p = max(_bounds[name].min_val, min(p, _bounds[name].max_val));
     } else {
       p = 0.0f;
     }
   };
 
-  update_param(_p_base.kp, grad.kp, m.kp, v.kp, "kp");
-  update_param(_p_base.ki, grad.ki, m.ki, v.ki, "ki");
-  update_param(_p_base.kd, grad.kd, m.kd, v.kd, "kd");
-  update_param(_p_base.kv, grad.kv, m.kv, v.kv, "kv");
-  update_param(_p_base.ka, grad.ka, m.ka, v.ka, "ka");
+  update_param(_p_base.kp, grad.kp, m.kp, v.kp, _alphas.kp, "kp");
+  update_param(_p_base.ki, grad.ki, m.ki, v.ki, _alphas.ki, "ki");
+  update_param(_p_base.kd, grad.kd, m.kd, v.kd, _alphas.kd, "kd");
+  update_param(_p_base.kv, grad.kv, m.kv, v.kv, _alphas.kv, "kv");
+  update_param(_p_base.ka, grad.ka, m.ka, v.ka, _alphas.ka, "ka");
 
-  cout << "[AdamTuner] ADAM fineshed: new parms: " 
+  cout << "ADAM fineshed: new parms: " 
             << "Kp=" << _p_base.kp << " Kv=" << _p_base.kv << endl;
 
   _current = EVAL_BASE;
