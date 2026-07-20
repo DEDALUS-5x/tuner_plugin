@@ -147,13 +147,10 @@ public:
       _glob_counter++;
 
       // check tolerance
-      bool target_reached = (current_cost < 0.05f);
-      float delta_kp = abs(new_params.kp - old_params.kp);
-      float delta_kv = abs(new_params.kv - old_params.kv);
-      bool parameters_stagnated = (delta_kp < 0.005f && delta_kv < 0.001f);
+      bool target_reached = (current_cost < 10.0f);
       bool timeout_reached = (_glob_counter > 240);
 
-      if (target_reached || parameters_stagnated || timeout_reached) {
+      if (target_reached || timeout_reached) {
         // next axis
         switch(_current_phase){
           case TUNE_X: _current_phase = TUNE_Y; break;
