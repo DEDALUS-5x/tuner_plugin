@@ -171,6 +171,10 @@ public:
 
         if (_current_phase != TUNE_DONE) {
           setup_tuner_for_current_phase(); 
+        } else{
+
+          cout << "\n\n*calibration completed\n" << endl;
+          return return_type::retry;
         }
       } 
       
@@ -186,6 +190,13 @@ public:
       out["kd"] = new_params.kd;
       out["kv"] = new_params.kv;
       out["ka"] = new_params.ka;
+
+      cout << "new PIDs  " << (int)_current_phase << " : "
+           << "Kp: " << new_params.kp 
+           << " | Ki: " << new_params.ki 
+           << " | Kd: " << new_params.kd 
+           << " | Kv: " << new_params.kv 
+           << " | Ka: " << new_params.ka << "\n-----------------------" << endl;
     }
 
     if (!_agent_id.empty()) out["agent_id"] = _agent_id;
