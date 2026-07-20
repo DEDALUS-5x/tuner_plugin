@@ -57,8 +57,8 @@ class Tuner{
     int _t_step = 0;
     float _current_cost;
 
-    TuningParams _alphas = {1.0f, 0.1f, 0.001f, 0.1f, 0.001f}; // learning rates
-    TuningParams _deltas = {0.5f, 0.05f, 0.001f, 0.05f, 0.001f};
+    TuningParams _alphas = {5.0f, 0.1f, 0.001f, 1.0f, 0.001f}; // learning rates
+    TuningParams _deltas = {0.5f, 0.05f, 0.001f, 0.5f, 0.001f};
 
     TuningParams m = {0, 0, 0, 0, 0};
     TuningParams v = {0, 0, 0, 0, 0};

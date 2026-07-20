@@ -101,7 +101,7 @@ TuningParams Tuner::apply_adam(){
   grad.ka = (_cost_ka - _cost_base) / _deltas.ka;
 
   // lambda for ADAM single parameter
-  auto update_param = [&](float& p, float g, float& m_val, float specific_alpha, float& v_val, string name) {
+  auto update_param = [&](float& p, float g, float& m_val, float& v_val, float specific_alpha, string name) {
 
     // moments update
     m_val = _beta_1 * m_val + (1.0f - _beta_1) * g;

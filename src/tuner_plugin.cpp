@@ -148,7 +148,7 @@ public:
 
       // check tolerance
       bool target_reached = (current_cost < 10.0f);
-      bool timeout_reached = (_glob_counter > 240);
+      bool timeout_reached = (_glob_counter > 18);
 
       if (target_reached || timeout_reached) {
         // next axis
@@ -292,10 +292,10 @@ private:
     TuningParams start_pids;
 
     if (_current_phase == TUNE_Y || _current_phase == TUNE_X) {
-      bounds["kp"] = {0.0f, 50.0f};
+      bounds["kp"] = {0.0f, 150.0f};
       bounds["ki"] = {0.0f, 10.0f};
       bounds["kd"] = {0.0f, 500.0f};
-      bounds["kv"] = {0.0f, 5.0f};
+      bounds["kv"] = {0.0f, 50.0f};
       bounds["ka"] = {0.0f, 2.0f};
     } else {
         bounds["kp"] = {0.0f, 50.0f};
